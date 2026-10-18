@@ -1,0 +1,12 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const run = Number(process.env.GITHUB_RUN_NUMBER);
+const version = process.env.APP_VERSION;
+if (!Number.isSafeInteger(run) || run < 1 || !/^\d+\.\d+\.\d+$/.test(version || '')) throw new Error('A valid GITHUB_RUN_NUMBER and APP_VERSION are required.');
+const file = path.resolve('android/app/build.gradle');
+let gradle = fs.readFileSync(file, 'utf8');
+if (!/versionCode\s+\d+/.test(gradle) || !/versionName\s+["'][^"']+["']/.test(gradle)) throw new Error('Could not find Android version fields.');
+gradle = gradle.replace(/versionCode\s+\d+/, `versionCode ${run}`).replace(/versionName\s+["'][^"']+["']/, `versionName "${version}"`);
+fs.writeFileSync(file, gradle);
+console.log(`Android version set to ${version} (${run}).`);

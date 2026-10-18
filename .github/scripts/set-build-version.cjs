@@ -1,0 +1,14 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const packagePath = path.resolve('package.json');
+const data = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+const base = /^([0-9]+)\.([0-9]+)\.[0-9]+(?:[-+].*)?$/.exec(data.version);
+const run = Number(process.env.GITHUB_RUN_NUMBER);
+if (!base || !Number.isSafeInteger(run) || run < 1) throw new Error('Invalid package version or GITHUB_RUN_NUMBER.');
+const version = `${base[1]}.${base[2]}.${run}`;
+data.version = version;
+fs.writeFileSync(packagePath, `${JSON.stringify(data, null, 2)}\n`);
+fs.writeFileSync('build-version.js', `'use strict';\nwindow.NACAR_LIVE_VERSION = ${JSON.stringify(version)};\n`);
+if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
+console.log(`Nácar Live version: ${version}`);

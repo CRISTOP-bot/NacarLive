@@ -1,0 +1,88 @@
+name: Build and release Nácar Live
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+          - platform: android
+            os: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Generate automatic app version
+        id: version
+        run: node .github/scripts/set-build-version.cjs
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Check JavaScript syntax
+        run: npm run check
+      - name: Build Windows installer and portable app
+        if: matrix.platform == 'windows'
+        run: npm run dist:win
+      - name: Set up Java
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Set up Android SDK
+        if: matrix.platform == 'android'
+        uses: android-actions/setup-android@v3
+      - name: Build Android APK
+        if: matrix.platform == 'android'
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm run build:web
+          npx cap add android
+          npx cap sync android
+          node .github/scripts/set-android-version.cjs
+          cd android
+          ./gradlew assembleDebug
+      - name: Upload build files
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: ${{ matrix.platform == 'windows' && 'release/*.exe' || 'android/app/build/outputs/apk/debug/*.apk' }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish versioned GitHub Release
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download platform builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-files
+          merge-multiple: true
+      - name: Create release with all builds
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.0.${{ github.run_number }}-main.${{ github.run_number }}.${{ github.sha }}
+          name: Nácar Live v2.0.${{ github.run_number }} — Android + Windows build #${{ github.run_number }}
+          make_latest: true
+          files: release-files/*

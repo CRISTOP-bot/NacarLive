@@ -1,0 +1,6 @@
+{
+  "appId": "mx.cristopbot.nacarlive",
+  "appName": "Nácar Live",
+  "webDir": "www",
+  "server": { "androidScheme": "https" }
+}
