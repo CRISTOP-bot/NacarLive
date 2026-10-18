@@ -69,7 +69,7 @@ jobs:
           Read the repository guidance, inspect the failure log, identify the failing cause, implement the smallest appropriate fix, and run relevant local checks. Summarize the cause, files changed, and checks actually run.
           PROMPT
           printf '\nFailed run: %s\n' "$FAILED_RUN_URL" >> /tmp/opencode-prompt.md
-          "$HOME/.opencode/bin/opencode" run --model "$MODEL" --auto --prompt "$(cat /tmp/opencode-prompt.md)"
+          "$HOME/.opencode/bin/opencode" run --model "$MODEL" --auto "$(cat /tmp/opencode-prompt.md)"
 
       - name: Create a reviewable repair pull request
         id: repair-pr
