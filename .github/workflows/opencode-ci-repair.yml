@@ -6,7 +6,7 @@ on:
     types: [completed]
 
 permissions:
-  actions: read
+  actions: write
   contents: write
   pull-requests: write
 
@@ -72,6 +72,7 @@ jobs:
           "$HOME/.opencode/bin/opencode" run --model "$MODEL" --auto --prompt "$(cat /tmp/opencode-prompt.md)"
 
       - name: Create a reviewable repair pull request
+        id: repair-pr
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ github.token }}
@@ -88,3 +89,24 @@ jobs:
             The normal PR CI must pass before this change is merged.
           base: main
           draft: false
+
+      - name: Run CI on the repair branch and report the result
+        if: steps.repair-pr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: opencode/ci-fix-${{ github.event.workflow_run.id }}
+          PR_NUMBER: ${{ steps.repair-pr.outputs.pull-request-number }}
+        run: |
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+          for attempt in $(seq 1 60); do
+            run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --branch "$BRANCH" --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            if [ -n "$run_id" ]; then break; fi
+            sleep 5
+          done
+          test -n "$run_id"
+          if gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status; then
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "OpenCode repair branch CI passed: $(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
+          else
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "OpenCode created a proposed fix, but its full Windows/Android CI still fails: $(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json url --jq .url). Review the logs; do not merge until resolved."
+            exit 1
+          fi
